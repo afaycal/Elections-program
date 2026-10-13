@@ -1,0 +1,411 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IRI Product Lookup</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --text: #1c2430; --muted: #5d6877; --line: #dde2e8;
+    --accent: #0b5cad; --accent-soft: #e6f0fa; --ok: #1d7a46; --ok-soft: #e5f4ea;
+    --warn: #9a5b00; --warn-soft: #fdf2df; --no: #a12a2a; --no-soft: #fbe9e9;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #12161c; --panel: #1b2129; --text: #e4e8ee; --muted: #9aa5b3; --line: #2d3540;
+      --accent: #6fb0f0; --accent-soft: #1b2d42; --ok: #6cc795; --ok-soft: #173123;
+      --warn: #e8b35c; --warn-soft: #33270f; --no: #f08a8a; --no-soft: #3a1a1a;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #12161c; --panel: #1b2129; --text: #e4e8ee; --muted: #9aa5b3; --line: #2d3540;
+    --accent: #6fb0f0; --accent-soft: #1b2d42; --ok: #6cc795; --ok-soft: #173123;
+    --warn: #e8b35c; --warn-soft: #33270f; --no: #f08a8a; --no-soft: #3a1a1a;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 24px 16px 60px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  h2 { font-size: 17px; margin: 0 0 10px; }
+  .sub { color: var(--muted); margin: 0 0 20px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+  form { display: grid; grid-template-columns: 2fr 1.4fr auto; gap: 10px; align-items: end; }
+  label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 4px; }
+  input[type=text] { width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px;
+                     background: var(--bg); color: var(--text); font: inherit; }
+  button { padding: 10px 18px; border: 0; border-radius: 8px; background: var(--accent); color: #fff;
+           font: inherit; font-weight: 600; cursor: pointer; }
+  button.ghost { background: transparent; color: var(--accent); border: 1px solid var(--line); padding: 6px 12px; font-weight: 500; }
+  .opts { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 10px; font-size: 13px; color: var(--muted); align-items: center; }
+  .verdict { border-left: 5px solid var(--ok); }
+  .verdict.maybe { border-left-color: var(--warn); }
+  .verdict.none { border-left-color: var(--no); }
+  .badge { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+  .b-ok { background: var(--ok-soft); color: var(--ok); }
+  .b-maybe { background: var(--warn-soft); color: var(--warn); }
+  .b-no { background: var(--no-soft); color: var(--no); }
+  .kv { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin: 12px 0; }
+  .kv div { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+  .kv b { display: block; font-size: 12px; color: var(--muted); font-weight: 500; }
+  .kv span { font-weight: 600; word-break: break-word; }
+  .tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  .tbl th, .tbl td { text-align: left; padding: 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  .tbl th { color: var(--muted); font-weight: 600; font-size: 12px; }
+  .scroll { overflow-x: auto; }
+  details.std > summary { cursor: pointer; color: var(--accent); }
+  details.std p { margin: 6px 0; }
+  .muted { color: var(--muted); }
+  .warnbox { background: var(--warn-soft); color: var(--warn); border-radius: 8px; padding: 8px 12px; margin: 8px 0; font-size: 13.5px; }
+  .web { background: var(--accent-soft); border-radius: 8px; padding: 10px 12px; margin: 8px 0; font-size: 14px; }
+  .links a { margin-right: 14px; color: var(--accent); }
+  .alt { border: 1px solid var(--line); border-radius: 8px; margin: 8px 0; }
+  .alt > summary { padding: 10px 12px; cursor: pointer; }
+  .alt > div { padding: 0 12px 12px; }
+  mark { background: #ffe58a; color: #1c2430; padding: 0 1px; border-radius: 2px; }
+  @media (max-width: 720px) { form { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>IRI Product Lookup</h1>
+  <p class="sub">Enter a product (and optionally its manufacturer). The tool searches the IRI standards list and the web
+    to find the category, section, HS code, and any decree and standard that apply.</p>
+
+  <div class="card">
+    <form id="f">
+      <div><label for="q">Product name or HS code</label>
+        <input type="text" id="q" placeholder="e.g. steam iron, AA battery, olive oil, 8516.40" autofocus></div>
+      <div><label for="co">Manufacturer / company (optional)</label>
+        <input type="text" id="co" placeholder="e.g. Philips, Duracell, Ariston"></div>
+      <button type="submit">Search</button>
+    </form>
+    <div class="opts">
+      <label style="margin:0"><input type="checkbox" id="useWeb" checked> Search the web (Wikipedia) to identify the product</label>
+      <span id="dbInfo"></span>
+      <button class="ghost" type="button" id="loadBtn">Load updated Excel…</button>
+      <input type="file" id="file" accept=".xlsx,.xls" hidden>
+    </div>
+  </div>
+
+  <div id="out"></div>
+</div>
+
+<script>
+// Rows exported from the "All Standards" sheet, columns in Excel order.
+const RAW = /*__IRI_DATA__*/[];
+
+const COLS = ["customsHs","hs","category","description","decreeNo","decreeDate","restriction","validRef",
+  "standard","section","scope","outScope","examples","M","S","P","D","priority","samples","typeApproval",
+  "price","directorate","division","lab","portal"];
+
+const STOP = new Set(("the and for with from that this are was were has have had its into over under not all any " +
+  "other than such use used using also which their them they who whom one two may can per etc only each more most " +
+  "part general requirement requirements method methods test tests testing specification specifications product " +
+  "products type types including include includes intended similar purpose purposes household " +
+  "company companies brand brands manufacturer manufacturers manufacturing manufactures corporation multinational " +
+  "international founded headquartered headquarters based known american french german italian chinese japanese " +
+  "korean british lebanese turkish swiss dutch spanish inc ltd llc group subsidiary owned global world largest " +
+  "public private sells sold produces produced makes made founded since year years range line lines market " +
+  "markets founder founders city country state wikipedia article name named first new related develop develops " +
+  "developed support supports repair repairs smart technology technologies system systems solution solutions service " +
+  "services provide provides offer offers operate operates owned business businesses industry industries consumer " +
+  "consumers equipment device devices headquarter label").split(" "));
+
+// Extra words ignored only when they come from a web description (too generic there).
+const WEB_STOP = new Set(["power", "electric", "electrical", "electronic", "electronics", "digital", "home",
+  "quality", "safety", "standard", "energy", "material", "materials", "component", "components", "unit", "units"]);
+
+let DATA = [], INDEX = [];
+
+function norm(s) { return String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, ""); }
+function stem(w) {
+  if (w.length > 4 && w.endsWith("ies")) return w.slice(0, -3) + "y";
+  if (w.length > 4 && /(ches|shes|xes|sses|zes)$/.test(w)) return w.slice(0, -2);
+  if (w.length > 3 && w.endsWith("s") && !w.endsWith("ss") && !w.endsWith("us")) return w.slice(0, -1);
+  return w;
+}
+function tokens(s) {
+  return norm(s).split(/[^a-z0-9]+/).filter(w => w.length > 2 && !STOP.has(w) && !/^\d+$/.test(w)).map(stem);
+}
+function digits(s) { return String(s || "").replace(/[^0-9]/g, ""); }
+function esc(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+
+function load(rawRows) {
+  DATA = rawRows.map(a => Object.fromEntries(COLS.map((k, i) => [k, String(a[i] ?? "").trim()])))
+                .filter(r => r.category || r.standard);
+  INDEX = DATA.map(r => ({
+    category: new Set(tokens(r.category)),
+    description: new Set(tokens(r.description)),
+    examples: new Set(tokens(r.examples)),
+    scope: new Set(tokens(r.scope)),
+    portal: new Set(tokens(r.portal)),
+    outScope: new Set(tokens(r.outScope)),
+    hsCodes: (r.hs + "/" + r.customsHs).split(/[\/,;]| or |\s-\s/i).map(digits).filter(d => d.length >= 2),
+  }));
+  IDF_CACHE.clear();
+  const cats = new Set(DATA.map(r => r.category));
+  document.getElementById("dbInfo").textContent = `Database: ${DATA.length} standards in ${cats.size} categories`;
+}
+
+// A query word matches a field when the stems are equal or share a 6-letter root
+// (refrigerator ~ refrigerating, heater ~ heating is not matched on purpose).
+function hit(set, q) {
+  if (set.has(q)) return true;
+  if (q.length < 6) return false;
+  const root = q.slice(0, 6);
+  for (const t of set) if (t.length >= 6 && t.startsWith(root)) return true;
+  return false;
+}
+
+const WEIGHTS = { category: 6, description: 4, examples: 3, portal: 3, scope: 2 };
+// Words taken from a web description are noisier, so they only count in the main fields.
+const WEB_WEIGHTS = { category: 6, portal: 3, description: 2 };
+
+function scoreRow(i, terms, hsQuery) {
+  const ix = INDEX[i];
+  let score = 0, matched = new Set(), outHits = [];
+  if (hsQuery) {
+    for (const code of ix.hsCodes) {
+      if (code.startsWith(hsQuery) || hsQuery.startsWith(code)) {
+        score += 10 + Math.min(code.length, hsQuery.length);
+        matched.add("#hs");
+      }
+    }
+  }
+  for (const { t, w, web } of terms) {
+    let best = 0;
+    const weights = web ? WEB_WEIGHTS : WEIGHTS;
+    for (const f in weights) if (hit(ix[f], t)) best = Math.max(best, weights[f]);
+    if (best) { score += best * w; matched.add(t); }
+    else if (w >= 0.5 && hit(ix.outScope, t)) outHits.push(t);
+  }
+  return { score, matched, outHits };
+}
+
+// Rarity weight of a word: words found in many categories ("system", "water")
+// say little about the product, words found in one or two say a lot.
+const IDF_CACHE = new Map();
+function idf(t) {
+  if (!IDF_CACHE.has(t)) {
+    const cats = new Set(), all = new Set(DATA.map(r => r.category));
+    DATA.forEach((r, i) => { if (hit(INDEX[i].category, t) || hit(INDEX[i].description, t)) cats.add(r.category); });
+    IDF_CACHE.set(t, cats.size ? Math.log(1 + all.size / cats.size) / Math.log(1 + all.size) : 0);
+  }
+  return IDF_CACHE.get(t);
+}
+
+function rank(userTerms, webTerms, hsQuery) {
+  const terms = [...userTerms.map(t => ({ t, w: 0.5 + 0.5 * idf(t) })),
+                 ...webTerms.map(t => ({ t, w: 0.5 * idf(t), web: true }))];
+  const cats = new Map();
+  DATA.forEach((r, i) => {
+    const s = scoreRow(i, terms, hsQuery);
+    if (!cats.has(r.category)) cats.set(r.category, { category: r.category, rows: [], best: 0, userHits: new Set() });
+    const c = cats.get(r.category);
+    c.rows.push({ r, s: s.score, out: s.outHits });
+    c.best = Math.max(c.best, s.score);
+    s.matched.forEach(t => { if (t === "#hs" || userTerms.includes(t)) c.userHits.add(t); });
+  });
+  const list = [...cats.values()].filter(c => c.userHits.size > 0 || c.best >= 1.5);
+  // Reward categories that cover more of the words the user typed.
+  for (const c of list) {
+    const cover = userTerms.length ? c.userHits.size / userTerms.length : 0;
+    c.total = c.best * (1 + cover) + Math.log(1 + c.rows.filter(x => x.s > 0).length);
+    c.rows.sort((a, b) => b.s - a.s);
+    c.outHits = new Set(c.rows[0].out);  // exclusions of the best-matching standard only
+  }
+  return list.sort((a, b) => b.total - a.total);
+}
+
+async function webLookup(query) {
+  const url = "https://en.wikipedia.org/w/api.php?action=query&format=json&origin=*&generator=search" +
+    "&gsrlimit=3&prop=extracts&exintro=1&explaintext=1&exsentences=3&exlimit=3&gsrsearch=" + encodeURIComponent(query);
+  const res = await fetch(url);
+  if (!res.ok) throw new Error("HTTP " + res.status);
+  const json = await res.json();
+  const pages = Object.values(json?.query?.pages || {}).sort((a, b) => a.index - b.index);
+  return pages.filter(p => p.extract).slice(0, 2)
+    .map(p => ({ title: p.title, extract: p.extract, url: "https://en.wikipedia.org/wiki/" + encodeURIComponent(p.title.replace(/ /g, "_")) }));
+}
+
+function uniq(arr) { return [...new Set(arr.filter(Boolean))]; }
+
+function highlight(text, terms) {
+  let html = esc(text);
+  for (const t of terms) {
+    if (t.length < 3 || t.startsWith("#")) continue;
+    const root = t.length >= 6 ? t.slice(0, 6) : t;
+    html = html.replace(new RegExp("\\b(" + root.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "[a-z]*)", "gi"), "<mark>$1</mark>");
+  }
+  return html;
+}
+
+function standardsTable(rows, terms) {
+  const body = rows.map(({ r }) => {
+    const tests = ["M", "S", "P", "D"].filter(k => r[k]).join(", ");
+    return `<tr>
+      <td><b>${esc(r.standard)}</b></td>
+      <td>${highlight(r.description, terms)}
+        <details class="std"><summary>Scope / out of scope / examples</summary>
+          <p><b>Scope:</b> ${highlight(r.scope, terms) || "—"}</p>
+          <p><b>Out of scope:</b> ${highlight(r.outScope, terms) || "—"}</p>
+          <p><b>Examples:</b> ${highlight(r.examples, terms).replace(/\n+/g, "<br>") || "—"}</p>
+          <p class="muted">Tests: ${esc(tests) || "—"} · Priority: ${esc(r.priority) || "—"} · Samples: ${esc(r.samples) || "—"} ·
+            Type approval: ${esc(r.typeApproval) || "—"} · Price: ${r.price ? "$" + esc(r.price) : "—"} ·
+            ${esc(r.lab)} (${esc(r.division)})</p>
+        </details></td>
+      <td>${esc(r.hs || r.customsHs)}</td>
+      <td>${esc(r.decreeNo)}<br><span class="muted">${esc(r.decreeDate)}</span></td>
+      <td>${esc(r.restriction)}</td>
+    </tr>`;
+  }).join("");
+  return `<div class="scroll"><table class="tbl"><thead><tr>
+    <th>Standard</th><th>Description</th><th>HS code</th><th>Decree</th><th>Restriction</th>
+    </tr></thead><tbody>${body}</tbody></table></div>`;
+}
+
+// The standards that best fit the product: those scoring at least 60% of the top one.
+function bestRows(c) { return c.rows.filter(x => x.s > 0 && x.s >= c.rows[0].s * 0.6); }
+
+function summary(c, rows) {
+  const rs = rows.map(x => x.r);
+  const decrees = uniq(rs.map(r => r.decreeNo ? `${r.decreeNo}${r.decreeDate ? " (" + r.decreeDate + ")" : ""}` : ""));
+  return `<div class="kv">
+    <div><b>Category</b><span>${esc(c.category)}</span></div>
+    <div><b>Section</b><span>${esc(uniq(rs.map(r => r.section)).join(", ") || "—")}</span></div>
+    <div><b>Sector (portal)</b><span>${esc(uniq(rs.map(r => r.portal)).join(", ") || "—")}</span></div>
+    <div><b>HS code(s)</b><span>${esc(uniq(rs.map(r => r.hs || r.customsHs)).join(" · ") || "—")}</span></div>
+    <div><b>Decree No. (date)</b><span>${esc(decrees.join(" · ") || "—")}</span></div>
+    <div><b>Restriction & NAJM code</b><span>${esc(uniq(rs.map(r => r.restriction)).join(" · ") || "—")}</span></div>
+    <div><b>Valid reference (lab)</b><span>${esc(uniq(rs.map(r => r.validRef)).join(" · ") || "—")}</span></div>
+    <div><b>Matching standards</b><span>${rs.length} of ${c.rows.length} in this category</span></div>
+  </div>`;
+}
+
+function searchLinks(q) {
+  const g = s => "https://www.google.com/search?q=" + encodeURIComponent(s);
+  return `<div class="links">Search further:
+    <a href="${g(q + " HS code")}" target="_blank" rel="noopener">HS code on Google</a>
+    <a href="${g(q + " product")}" target="_blank" rel="noopener">What is this product?</a>
+    <a href="${g(q + " IEC ISO EN standard")}" target="_blank" rel="noopener">Applicable standards</a></div>`;
+}
+
+function render(query, userTerms, webTerms, hsQuery, web, webError) {
+  const out = document.getElementById("out");
+  const list = rank(userTerms, webTerms, hsQuery);
+  const allTerms = [...userTerms, ...webTerms];
+  let html = "";
+
+  if (web && web.length) {
+    html += `<div class="card"><h2>What the web says</h2>` + web.map(p =>
+      `<div class="web"><b><a href="${p.url}" target="_blank" rel="noopener">${esc(p.title)}</a></b> — ${esc(p.extract)}</div>`).join("") +
+      searchLinks(query) + `</div>`;
+  } else if (webError) {
+    html += `<div class="card"><div class="warnbox">Web lookup unavailable (${esc(webError)}). Results use the Excel list only.</div>${searchLinks(query)}</div>`;
+  }
+
+  if (!list.length) {
+    html += `<div class="card verdict none"><span class="badge b-no">Not found in IRI list</span>
+      <h2 style="margin-top:8px">No IRI category matches “${esc(query)}”</h2>
+      <p>The product does not appear in the IRI standards list, so no IRI decree or standard was identified.
+      Try a more generic name (e.g. “water heater” instead of a model number), add the company name, or enter the HS code.</p>
+      ${searchLinks(query)}</div>`;
+    out.innerHTML = html;
+    return;
+  }
+
+  const top = list[0];
+  const direct = top.userHits.size > 0;
+  const strong = direct && (top.userHits.has("#hs") || top.userHits.size >= Math.min(2, userTerms.length));
+  const cls = strong ? "" : "maybe";
+  const badge = strong ? `<span class="badge b-ok">Subject to decree & standard</span>`
+                       : `<span class="badge b-maybe">Possible match — please verify</span>`;
+  const best = bestRows(top);
+  const decrees = uniq(best.map(x => x.r.decreeNo));
+  const stds = uniq(best.map(x => x.r.standard));
+
+  html += `<div class="card verdict ${cls}">${badge}
+    <h2 style="margin-top:8px">${esc(top.category)}</h2>
+    <p>“${esc(query)}” ${strong ? "falls under" : "most likely falls under"} the category <b>${esc(top.category)}</b>.
+      It is subject to decree${decrees.length > 1 ? "s" : ""} <b>${esc(decrees.join(", ")) || "—"}</b>
+      and to the standard${stds.length > 1 ? "s" : ""} <b>${esc(stds.slice(0, 8).join(", "))}${stds.length > 8 ? "…" : ""}</b>.</p>
+    ${direct ? "" : `<p class="muted">This match comes only from the web description of the product, not from the words you typed.</p>`}
+    ${top.outHits.size ? `<div class="warnbox">“${esc([...top.outHits].join(", "))}” appears in the <i>Out of scope</i> text of the best-matching standard (${esc(top.rows[0].r.standard)}). Check that the product is not excluded.</div>` : ""}
+    ${summary(top, best)}
+    <h2>Applicable standards</h2>
+    <p class="muted">Open a row to see scope, exclusions and examples.</p>
+    ${standardsTable(best, allTerms)}
+    ${top.rows.length > best.length ? `<details class="alt"><summary>All ${top.rows.length} standards in “${esc(top.category)}”</summary>
+      <div>${standardsTable(top.rows, allTerms)}</div></details>` : ""}
+  </div>`;
+
+  const others = list.slice(1, 6);
+  if (others.length) {
+    html += `<div class="card"><h2>Other possible categories</h2>` + others.map(c => {
+      const b = bestRows(c);
+      return `<details class="alt"><summary><b>${esc(c.category)}</b> <span class="muted">— HS ${esc(uniq(b.map(x => x.r.hs || x.r.customsHs)).slice(0, 3).join(", "))} ·
+        Decree ${esc(uniq(b.map(x => x.r.decreeNo)).join(", "))} · ${esc(uniq(b.map(x => x.r.standard)).slice(0, 3).join(", "))}</span></summary>
+        <div>${summary(c, b)}${standardsTable(b, allTerms)}</div></details>`;
+    }).join("") + `</div>`;
+  }
+  out.innerHTML = html;
+}
+
+let searchId = 0;
+async function run(e) {
+  e && e.preventDefault();
+  const product = document.getElementById("q").value.trim();
+  const company = document.getElementById("co").value.trim();
+  if (!product && !company) return;
+  const query = [product, company].filter(Boolean).join(" ");
+  const id = ++searchId;
+
+  const hsRaw = /^[\d.\s\/-]+$/.test(product) ? digits(product) : "";
+  const hsQuery = hsRaw.length >= 2 ? hsRaw : "";
+  const userTerms = uniq(tokens(product));
+
+  render(query, userTerms, [], hsQuery, null, null);
+  if (!document.getElementById("useWeb").checked || hsQuery) return;
+
+  const out = document.getElementById("out");
+  out.insertAdjacentHTML("afterbegin", `<div class="card muted" id="loading">Searching the web for “${esc(query)}”…</div>`);
+  let web = [], err = null;
+  try {
+    web = await webLookup(query);
+    if (!web.length && product && company) web = await webLookup(product);
+  } catch (ex) { err = ex.message || "network error"; }
+  if (id !== searchId) return;
+
+  const webTerms = uniq(web.flatMap(p => tokens(p.title + " " + p.extract)))
+    .filter(t => !userTerms.includes(t) && !WEB_STOP.has(t) && !tokens(company).includes(t)).slice(0, 40);
+  render(query, userTerms, webTerms, hsQuery, web, err);
+}
+
+document.getElementById("f").addEventListener("submit", run);
+document.getElementById("loadBtn").addEventListener("click", () => document.getElementById("file").click());
+document.getElementById("file").addEventListener("change", async ev => {
+  const file = ev.target.files[0];
+  if (!file) return;
+  try {
+    if (!window.XLSX) await new Promise((ok, fail) => {
+      const s = document.createElement("script");
+      s.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+      s.onload = ok; s.onerror = () => fail(new Error("could not load the Excel reader (offline?)"));
+      document.head.appendChild(s);
+    });
+    const wb = XLSX.read(await file.arrayBuffer(), { type: "array", cellDates: true });
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: "" }).slice(2)
+      .map(a => a.map(v => v instanceof Date
+        ? `${String(v.getDate()).padStart(2, "0")}/${String(v.getMonth() + 1).padStart(2, "0")}/${v.getFullYear()}` : v));
+    load(rows);
+    document.getElementById("out").innerHTML = `<div class="card">Loaded <b>${esc(file.name)}</b>: ${DATA.length} standards. This lasts until the page is reloaded — run build_lookup.py to make it permanent.</div>`;
+  } catch (ex) {
+    alert("Could not read the file: " + ex.message);
+  }
+});
+
+load(RAW);
+</script>
+</body>
+</html>
